@@ -82,6 +82,7 @@ async def process_pdf_async(pdf_file):
         f.write(pdf_file.read())
     
     # تحويل الـ PDF لصور مع DPI أقل لتقليل الحجم
+    # ملاحظة: poppler-utils بيتثبّت عن طريق Dockerfile أو .streamlit/packages.txt
     images = convert_from_path("temp.pdf", dpi=100, first_page=1, last_page=10)  # حد أقصى 10 صفحات
     extracted_texts = []
 
