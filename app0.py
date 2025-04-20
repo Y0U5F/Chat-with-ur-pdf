@@ -1,5 +1,5 @@
 import streamlit as st
-from pdf2image import convert_from_path
+import fitz  # PyMuPDF بدل pdf2image
 import base64
 from mistralai import Mistral
 from pydantic import BaseModel
@@ -11,6 +11,8 @@ from mistralai.models import ImageURLChunk, TextChunk
 from tenacity import retry, stop_after_attempt, wait_exponential
 import asyncio
 import aiohttp
+from PIL import Image
+import io
 
 # إعداد واجهة Streamlit
 st.title("Chat with Your PDF 📄")
@@ -75,22 +77,29 @@ async def structured_ocr_async(image_path: str, session: aiohttp.ClientSession) 
     )
     return chat_response.choices[0].message.parsed
 
-# دالة لتحويل PDF لصور واستخراج النصوص بشكل غير متزامن
+# دالة لتحويل PDF لصور باستخدام PyMuPDF واستخراج النصوص بشكل غير متزامن
 async def process_pdf_async(pdf_file):
     # حفظ الـ PDF مؤقتًا
     with open("temp.pdf", "wb") as f:
         f.write(pdf_file.read())
     
-    # تحويل الـ PDF لصور مع DPI أقل لتقليل الحجم
-    # ملاحظة: poppler-utils بيتثبّت عن طريق Dockerfile أو .streamlit/packages.txt
-    images = convert_from_path("temp.pdf", dpi=100, first_page=1, last_page=10)  # حد أقصى 10 صفحات
+    # فتح الـ PDF باستخدام PyMuPDF
+    pdf_document = fitz.open("temp.pdf")
+    max_pages = min(len(pdf_document), 10)  # حد أقصى 10 صفحات
     extracted_texts = []
 
     async with aiohttp.ClientSession() as session:
         tasks = []
-        for i, image in enumerate(images):
-            image_path = f"page_{i}.jpg"
-            image.save(image_path, "JPEG")
+        for page_num in range(max_pages):
+            page = pdf_document[page_num]
+            # تحويل الصفحة لصورة
+            pix = page.get_pixmap(dpi=100)  # DPI منخفض لتقليل الحجم
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            
+            # حفظ الصورة مؤقتًا
+            image_path = f"page_{page_num}.jpg"
+            img.save(image_path, "JPEG")
+            
             tasks.append(structured_ocr_async(image_path, session))
         
         # جمع النتايج بشكل غير متزامن
@@ -101,6 +110,7 @@ async def process_pdf_async(pdf_file):
             else:
                 st.warning(f"فشل معالجة صفحة: {result}")
     
+    pdf_document.close()
     return extracted_texts
 
 # دالة للإجابة على أسئلة
