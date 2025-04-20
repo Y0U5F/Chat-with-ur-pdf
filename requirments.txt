@@ -1,0 +1,8 @@
+mistralai
+pydantic
+pycountry
+pdf2image
+PyPDF2
+streamlit
+tenacity
+aiohttp
